@@ -1,4 +1,3 @@
-import express from "express"
 import { googleAuth, logOut } from "../controllers/auth.controller.js"
 
 const authRouter = express.Router()

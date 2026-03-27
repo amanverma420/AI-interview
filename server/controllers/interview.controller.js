@@ -86,6 +86,9 @@ export const generateQuestion = async (req, res) => {
   try {
     let { role, experience, mode, resumeText, projects, skills } = req.body
 
+    console.log("generateQuestion body:", { role, experience, mode, credits: "checking..." })
+
+
     role = role?.trim();
     experience = experience?.trim();
     mode = mode?.trim();
@@ -104,9 +107,11 @@ export const generateQuestion = async (req, res) => {
 
     if (user.credits < 50) {
       return res.status(400).json({
-        message: "Not enough credits. Minimum 50 required."
+        message: "Not enough credits. Minimum 50 required.",
+        credits: user.credits
       });
     }
+
 
     const projectText = Array.isArray(projects) && projects.length
       ? projects.join(", ")

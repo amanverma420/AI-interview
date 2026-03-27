@@ -18,14 +18,17 @@ function App() {
   const dispatch = useDispatch()
   useEffect(()=>{
     const getUser = async () => {
-      try {
-        const result = await axios.get(ServerUrl + "/api/user/current-user", {withCredentials:true})
-        dispatch(setUserData(result.data))
-      } catch (error) {
+    try {
+      const result = await axios.get(ServerUrl + "/api/user/current-user", { withCredentials: true })
+      dispatch(setUserData(result.data))
+    } catch (error) {
+      // 401 means not logged in — that's normal, not an error
+      if (error?.response?.status !== 401) {
         console.log(error)
-        dispatch(setUserData(null))
       }
+      dispatch(setUserData(null))
     }
+  }
     getUser()
 
   },[dispatch])

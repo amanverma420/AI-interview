@@ -7,6 +7,7 @@ import authRouter from "./routes/auth.route.js"
 import userRouter from "./routes/user.route.js"
 import interviewRouter from "./routes/interview.route.js"
 import paymentRouter from "./routes/payment.route.js"
+import express from "express";
 
 const app = express()
 // const cors = require("cors");

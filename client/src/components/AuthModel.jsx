@@ -3,7 +3,7 @@ import { useEffect } from 'react'
 import { useSelector } from 'react-redux'
 import { motion, AnimatePresence } from "motion/react"
 import { HiX } from "react-icons/hi"
-import Auth from '../pages/auth'
+import Auth from '../pages/Auth.jsx'
 
 function AuthModel({ onClose }) {
   const { userData } = useSelector((state) => state.user)

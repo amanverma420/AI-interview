@@ -28,7 +28,7 @@ function Step2Interview({ interviewData, onFinish }) {
   const [interimText, setInterimText]       = useState("");
   const [recordingSaved, setRecordingSaved] = useState(false);
 
-  // Refs — avoid stale closures
+  // Refs
   const videoRef            = useRef(null);
   const cameraStreamRef     = useRef(null);
   const mediaRecorderRef    = useRef(null);
@@ -40,10 +40,10 @@ function Step2Interview({ interviewData, onFinish }) {
   const answerRef           = useRef("");
   const timerRef            = useRef(null);
   const currentIndexRef     = useRef(0);
-  const timeLimitRef        = useRef(questions[0]?.timeLimit || 60);
+  const submittedRef        = useRef(false);
 
   // Keep refs in sync
-  useEffect(() => { answerRef.current  = answer;       }, [answer]);
+  useEffect(() => { answerRef.current = answer; }, [answer]);
   useEffect(() => { currentIndexRef.current = currentIndex; }, [currentIndex]);
 
   // ─── CAMERA ────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ function Step2Interview({ interviewData, onFinish }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-        audio: false,
+        audio: true, // capture audio too so the video file has audio
       });
       cameraStreamRef.current = stream;
       if (videoRef.current) {
@@ -61,23 +61,54 @@ function Step2Interview({ interviewData, onFinish }) {
 
       if (saveRecording) {
         recordedChunks.current = [];
-        const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-          ? 'video/webm;codecs=vp9'
-          : MediaRecorder.isTypeSupported('video/webm')
-          ? 'video/webm'
-          : 'video/mp4';
-        const recorder = new MediaRecorder(stream, { mimeType });
-        recorder.ondataavailable = (e) => {
-          if (e.data?.size > 0) recordedChunks.current.push(e.data);
-        };
-        recorder.start(1000);
-        mediaRecorderRef.current = recorder;
+
+        // pick a supported mime type
+        const mimeType =
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus') ? 'video/webm;codecs=vp9,opus' :
+          MediaRecorder.isTypeSupported('video/webm;codecs=vp8,opus') ? 'video/webm;codecs=vp8,opus' :
+          MediaRecorder.isTypeSupported('video/webm')                  ? 'video/webm' :
+          MediaRecorder.isTypeSupported('video/mp4')                   ? 'video/mp4' :
+          '';
+
+        try {
+          const recorderOptions = mimeType ? { mimeType } : {};
+          const recorder = new MediaRecorder(stream, recorderOptions);
+
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              recordedChunks.current.push(e.data);
+            }
+          };
+
+          // timeslice of 500ms ensures we get frequent data chunks
+          recorder.start(500);
+          mediaRecorderRef.current = recorder;
+        } catch (recErr) {
+          console.warn('MediaRecorder init failed, trying without mimeType:', recErr);
+          const recorder = new MediaRecorder(stream);
+          recorder.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) recordedChunks.current.push(e.data);
+          };
+          recorder.start(500);
+          mediaRecorderRef.current = recorder;
+        }
       }
 
       setIsCamOn(true);
     } catch (err) {
-      console.warn("Camera:", err);
-      setIsCamOn(false);
+      console.warn("Camera/mic access error:", err);
+      // try video-only fallback
+      try {
+        const videoOnlyStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        cameraStreamRef.current = videoOnlyStream;
+        if (videoRef.current) {
+          videoRef.current.srcObject = videoOnlyStream;
+          videoRef.current.play().catch(() => {});
+        }
+        setIsCamOn(true);
+      } catch {
+        setIsCamOn(false);
+      }
     }
   }, [saveRecording]);
 
@@ -87,11 +118,16 @@ function Step2Interview({ interviewData, onFinish }) {
       cameraStreamRef.current = null;
     };
 
-    if (saveRecording && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.onstop = () => {
-        if (recordedChunks.current.length > 0) {
-          const mime = mediaRecorderRef.current.mimeType || 'video/webm';
-          const blob = new Blob(recordedChunks.current, { type: mime });
+    const recorder = mediaRecorderRef.current;
+    if (saveRecording && recorder && recorder.state !== 'inactive') {
+      // request any remaining data before stopping
+      recorder.requestData();
+
+      recorder.onstop = () => {
+        const chunks = recordedChunks.current;
+        if (chunks.length > 0) {
+          const mime = recorder.mimeType || 'video/webm';
+          const blob = new Blob(chunks, { type: mime });
           const ext  = mime.includes('mp4') ? 'mp4' : 'webm';
           const url  = URL.createObjectURL(blob);
           const a    = Object.assign(document.createElement('a'), {
@@ -100,13 +136,17 @@ function Step2Interview({ interviewData, onFinish }) {
           });
           document.body.appendChild(a);
           a.click();
-          a.remove();
-          URL.revokeObjectURL(url);
+          setTimeout(() => {
+            a.remove();
+            URL.revokeObjectURL(url);
+          }, 1000);
           setRecordingSaved(true);
+        } else {
+          console.warn('No recorded chunks available');
         }
         finishStop();
       };
-      mediaRecorderRef.current.stop();
+      recorder.stop();
     } else {
       finishStop();
     }
@@ -114,13 +154,16 @@ function Step2Interview({ interviewData, onFinish }) {
 
   useEffect(() => {
     startCamera();
-    return () => { cameraStreamRef.current?.getTracks().forEach(t => t.stop()); };
+    return () => {
+      cameraStreamRef.current?.getTracks().forEach(t => t.stop());
+    };
   }, []);
 
   const toggleCamera = () => {
     if (isCamOn) {
       cameraStreamRef.current?.getTracks().forEach(t => t.stop());
       cameraStreamRef.current = null;
+      if (videoRef.current) videoRef.current.srcObject = null;
       setIsCamOn(false);
     } else {
       startCamera();
@@ -147,9 +190,12 @@ function Step2Interview({ interviewData, onFinish }) {
       setSelectedVoice(chosen);
       setVoiceReady(true);
     };
-    if (window.speechSynthesis.getVoices().length > 0) pick();
-    window.speechSynthesis.onvoiceschanged = pick;
-    setTimeout(pick, 600);
+    if (window.speechSynthesis.getVoices().length > 0) {
+      pick();
+    } else {
+      window.speechSynthesis.onvoiceschanged = pick;
+      setTimeout(pick, 600);
+    }
   }, []);
 
   // ─── SPEAK ─────────────────────────────────────────────────────
@@ -157,7 +203,8 @@ function Step2Interview({ interviewData, onFinish }) {
     return new Promise((resolve) => {
       if (!window.speechSynthesis || !text?.trim()) { resolve(); return; }
       window.speechSynthesis.cancel();
-      stopRecognitionFn();
+      // stop recognition while AI speaks
+      stopRecognitionInternal();
 
       const utt = new SpeechSynthesisUtterance(text);
       if (selectedVoice) utt.voice = selectedVoice;
@@ -182,16 +229,14 @@ function Step2Interview({ interviewData, onFinish }) {
       utt.onend   = done;
       utt.onerror = done;
 
-      // Chrome bug fix: resume if paused
       setTimeout(() => window.speechSynthesis.resume(), 100);
       window.speechSynthesis.speak(utt);
     });
   }, [selectedVoice]);
 
   // ─── SPEECH RECOGNITION ────────────────────────────────────────
-  // Use a function ref pattern so startRecognition can call itself recursively
-  const startRecognitionFn = useRef(null);
-  const stopRecognitionFn  = useCallback(() => {
+  // Internal stop — doesn't touch isMicOnRef so we can restart after AI finishes
+  const stopRecognitionInternal = useCallback(() => {
     if (recognitionRef.current) {
       try { recognitionRef.current.abort(); } catch {}
       recognitionRef.current = null;
@@ -200,98 +245,128 @@ function Step2Interview({ interviewData, onFinish }) {
     setInterimText('');
   }, []);
 
-  useEffect(() => {
-    startRecognitionFn.current = () => {
-      if (aiSpeakingRef.current)       return;
-      if (recognitionActive.current)   return;
-      if (!isMicOnRef.current)         return;
+  const startRecognition = useCallback(() => {
+    if (aiSpeakingRef.current)     return;
+    if (recognitionActive.current) return;
+    if (!isMicOnRef.current)       return;
 
-      const SpeechRec = window.webkitSpeechRecognition || window.SpeechRecognition;
-      if (!SpeechRec) {
-        setMicError("Speech recognition not supported. Please use Chrome or Edge.");
-        return;
+    const SpeechRec = window.webkitSpeechRecognition || window.SpeechRecognition;
+    if (!SpeechRec) {
+      setMicError("Speech recognition not supported in this browser. Please use Chrome or Edge.");
+      return;
+    }
+
+    const rec = new SpeechRec();
+    rec.lang            = 'en-US';
+    rec.continuous      = true;   // keep listening without re-starting
+    rec.interimResults  = true;
+    rec.maxAlternatives = 1;
+    recognitionRef.current = rec;
+
+    rec.onstart = () => {
+      recognitionActive.current = true;
+      setMicError("");
+    };
+
+    rec.onresult = (e) => {
+      let interimStr = '';
+      let finalStr   = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) finalStr   += t + ' ';
+        else                       interimStr += t;
       }
-
-      const rec = new SpeechRec();
-      rec.lang             = 'en-US';
-      rec.continuous       = false;   // single-shot; we restart on end
-      rec.interimResults   = true;
-      rec.maxAlternatives  = 1;
-      recognitionRef.current = rec;
-
-      rec.onstart = () => {
-        recognitionActive.current = true;
-        setMicError("");
-      };
-
-      rec.onresult = (e) => {
-        let interimStr = '';
-        let finalStr   = '';
-        for (let i = e.resultIndex; i < e.results.length; i++) {
-          const t = e.results[i][0].transcript;
-          if (e.results[i].isFinal) finalStr   += t + ' ';
-          else                       interimStr += t;
-        }
-        if (finalStr.trim()) {
-          setAnswer(prev => (prev.trim() + ' ' + finalStr.trim()).trim() + ' ');
-          setInterimText('');
-        } else {
-          setInterimText(interimStr);
-        }
-      };
-
-      rec.onend = () => {
-        recognitionActive.current = false;
-        recognitionRef.current    = null;
+      if (finalStr.trim()) {
+        setAnswer(prev => {
+          const updated = (prev.trim() + ' ' + finalStr.trim()).trim() + ' ';
+          answerRef.current = updated;
+          return updated;
+        });
         setInterimText('');
-        // Auto-restart if mic is still supposed to be on
-        if (isMicOnRef.current && !aiSpeakingRef.current) {
-          setTimeout(() => startRecognitionFn.current?.(), 150);
-        }
-      };
-
-      rec.onerror = (e) => {
-        recognitionActive.current = false;
-        recognitionRef.current    = null;
-        setInterimText('');
-
-        if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-          setMicError("Microphone permission denied. Please allow mic access in your browser.");
-          isMicOnRef.current = false;
-          setIsMicOn(false);
-          return;
-        }
-        if (e.error === 'aborted') return;
-        // Restart on any other error (no-speech, network, etc.)
-        if (isMicOnRef.current && !aiSpeakingRef.current) {
-          setTimeout(() => startRecognitionFn.current?.(), 300);
-        }
-      };
-
-      try { rec.start(); } catch (err) {
-        recognitionActive.current = false;
-        recognitionRef.current    = null;
-        setTimeout(() => startRecognitionFn.current?.(), 500);
+      } else {
+        setInterimText(interimStr);
       }
     };
-  }); // run every render so closures stay fresh
+
+    rec.onend = () => {
+      recognitionActive.current = false;
+      recognitionRef.current    = null;
+      setInterimText('');
+      // auto-restart only if mic is still on and AI isn't speaking
+      if (isMicOnRef.current && !aiSpeakingRef.current) {
+        setTimeout(() => {
+          if (isMicOnRef.current && !aiSpeakingRef.current) {
+            startRecognition();
+          }
+        }, 200);
+      }
+    };
+
+    rec.onerror = (e) => {
+      recognitionActive.current = false;
+      recognitionRef.current    = null;
+      setInterimText('');
+
+      if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
+        setMicError("Microphone permission denied. Please allow mic access in your browser settings.");
+        isMicOnRef.current = false;
+        setIsMicOn(false);
+        return;
+      }
+      if (e.error === 'aborted') return;
+
+      // restart on no-speech, network, audio-capture, etc.
+      if (isMicOnRef.current && !aiSpeakingRef.current) {
+        setTimeout(() => {
+          if (isMicOnRef.current && !aiSpeakingRef.current) {
+            startRecognition();
+          }
+        }, 400);
+      }
+    };
+
+    try {
+      rec.start();
+    } catch (err) {
+      console.warn('rec.start() failed:', err);
+      recognitionActive.current = false;
+      recognitionRef.current    = null;
+      setTimeout(() => {
+        if (isMicOnRef.current && !aiSpeakingRef.current) startRecognition();
+      }, 600);
+    }
+  }, []); // no deps — uses refs only, so always fresh
 
   const enableMic = useCallback(() => {
     isMicOnRef.current = true;
     setIsMicOn(true);
-    startRecognitionFn.current?.();
-  }, []);
+    setMicError("");
+    startRecognition();
+  }, [startRecognition]);
 
   const disableMic = useCallback(() => {
     isMicOnRef.current = false;
     setIsMicOn(false);
-    stopRecognitionFn();
-  }, [stopRecognitionFn]);
+    stopRecognitionInternal();
+  }, [stopRecognitionInternal]);
 
   const toggleMic = useCallback(() => {
     if (isMicOnRef.current) disableMic();
     else enableMic();
   }, [enableMic, disableMic]);
+
+  // restart recognition after AI finishes speaking (if mic was on)
+  useEffect(() => {
+    if (!isAISpeaking && isMicOn && !isIntroPhase) {
+      // small delay to let speech synthesis fully settle
+      const t = setTimeout(() => {
+        if (!aiSpeakingRef.current && isMicOnRef.current && !recognitionActive.current) {
+          startRecognition();
+        }
+      }, 400);
+      return () => clearTimeout(t);
+    }
+  }, [isAISpeaking]);
 
   // ─── INTERVIEW FLOW ────────────────────────────────────────────
   useEffect(() => {
@@ -323,7 +398,6 @@ function Step2Interview({ interviewData, onFinish }) {
   useEffect(() => {
     if (isIntroPhase || !questions[currentIndex]) return;
     const limit = questions[currentIndex].timeLimit || 60;
-    timeLimitRef.current = limit;
     setTimeLeft(limit);
 
     if (timerRef.current) clearInterval(timerRef.current);
@@ -337,8 +411,11 @@ function Step2Interview({ interviewData, onFinish }) {
     return () => clearInterval(timerRef.current);
   }, [isIntroPhase, currentIndex]);
 
+  // capture timeLeft in ref so submitAnswer can read it
+  const timeLeftRef = useRef(timeLeft);
+  useEffect(() => { timeLeftRef.current = timeLeft; }, [timeLeft]);
+
   // Auto-submit on timeout
-  const submittedRef = useRef(false);
   useEffect(() => {
     if (!isIntroPhase && timeLeft === 0 && !isSubmitting && !feedback && !submittedRef.current) {
       submittedRef.current = true;
@@ -359,7 +436,7 @@ function Step2Interview({ interviewData, onFinish }) {
         interviewId,
         questionIndex: currentIndexRef.current,
         answer: answerRef.current,
-        timeTaken: (q?.timeLimit || 60) - timeLeft,
+        timeTaken: (q?.timeLimit || 60) - timeLeftRef.current,
       }, { withCredentials: true });
       setFeedback(res.data.feedback);
       await speakText(res.data.feedback);
@@ -373,6 +450,7 @@ function Step2Interview({ interviewData, onFinish }) {
   const handleNext = async () => {
     submittedRef.current = false;
     setAnswer("");
+    answerRef.current = "";
     setFeedback("");
     setInterimText("");
     disableMic();
@@ -398,7 +476,8 @@ function Step2Interview({ interviewData, onFinish }) {
 
   useEffect(() => {
     return () => {
-      stopRecognitionFn();
+      isMicOnRef.current = false;
+      stopRecognitionInternal();
       window.speechSynthesis.cancel();
       if (timerRef.current) clearInterval(timerRef.current);
       cameraStreamRef.current?.getTracks().forEach(t => t.stop());
@@ -457,7 +536,6 @@ function Step2Interview({ interviewData, onFinish }) {
               </div>
             )}
 
-            {/* REC / LIVE badge */}
             {isCamOn && (
               <div className="absolute top-3 left-3 flex items-center gap-1.5 bg-black/65 backdrop-blur-sm rounded-full px-2.5 py-1">
                 <motion.div className="w-2 h-2 rounded-full bg-red-500"
@@ -468,7 +546,6 @@ function Step2Interview({ interviewData, onFinish }) {
               </div>
             )}
 
-            {/* Listening badge */}
             <AnimatePresence>
               {isMicOn && !isAISpeaking && (
                 <motion.div
@@ -481,7 +558,6 @@ function Step2Interview({ interviewData, onFinish }) {
               )}
             </AnimatePresence>
 
-            {/* AI speaking */}
             <AnimatePresence>
               {isAISpeaking && (
                 <motion.div
@@ -622,7 +698,10 @@ function Step2Interview({ interviewData, onFinish }) {
             <div className="relative flex-1 min-h-[120px] mb-3">
               <textarea
                 placeholder="Your spoken words will appear here automatically. You can also type directly…"
-                onChange={(e) => setAnswer(e.target.value)}
+                onChange={(e) => {
+                  setAnswer(e.target.value);
+                  answerRef.current = e.target.value;
+                }}
                 value={answer}
                 disabled={isAISpeaking}
                 className="w-full h-full min-h-[120px] bg-white/5 border border-white/10 rounded-2xl p-4 resize-none outline-none text-slate-200 placeholder-slate-600 focus:border-emerald-500/40 transition-all text-sm leading-relaxed disabled:opacity-50"

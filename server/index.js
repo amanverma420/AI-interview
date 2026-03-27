@@ -1,4 +1,3 @@
-app.options("*", cors());
 import dotenv from "dotenv"
 import connectDb from "./config/connectDb.js"
 import cookieParser from "cookie-parser"
@@ -11,7 +10,7 @@ import paymentRouter from "./routes/payment.route.js"
 
 const app = express()
 // const cors = require("cors");
-
+app.options("*", cors());
 app.use(cors({
   origin: [
     "http://localhost:5173",

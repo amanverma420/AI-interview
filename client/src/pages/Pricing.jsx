@@ -7,7 +7,7 @@ import axios from 'axios'
 import { ServerUrl } from '../App'
 import { useDispatch, useSelector } from 'react-redux'
 import { setUserData } from '../redux/userSlice'
-import Navbar from '../components/Navbar'
+import Navbar from '../components/Navbar.jsx'
 
 const features = [
   'AI interview sessions',

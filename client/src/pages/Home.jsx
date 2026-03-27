@@ -6,9 +6,9 @@ import { BsMic, BsArrowRight, BsCheckCircle, BsPlayCircle } from "react-icons/bs
 import { RiAiGenerate, RiBrainLine, RiFileChartLine } from "react-icons/ri"
 import { HiOutlineSparkles } from "react-icons/hi"
 import { FiUpload, FiTarget, FiTrendingUp } from "react-icons/fi"
-import Navbar from '../components/Navbar'
-import Footer from '../components/Footer'
-import AuthModel from '../components/AuthModel'
+import Navbar from '../components/Navbar.jsx'
+import Footer from '../components/Footer.jsx'
+import AuthModel from '../components/AuthModel.jsx'
 
 // Counter animation hook
 function useCounter(target, duration = 1500, startOnView = true) {

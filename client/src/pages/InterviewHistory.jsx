@@ -5,7 +5,7 @@ import { ServerUrl } from '../App'
 import { FiArrowLeft, FiSearch, FiFilter, FiClock, FiAward } from 'react-icons/fi'
 import { BsArrowRight } from 'react-icons/bs'
 import { motion } from 'motion/react'
-import Navbar from '../components/Navbar'
+import Navbar from '../components/Navbar.jsx'
 
 function InterviewHistory() {
   const [interviews, setInterviews] = useState([])

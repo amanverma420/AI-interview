@@ -1,8 +1,8 @@
 import dotenv from "dotenv";
 import connectDb from "./config/connectDb.js";
 import cookieParser from "cookie-parser";
-import express from "express";
 import cors from "cors";
+import express from "express";
 
 import authRouter from "./routes/auth.route.js";
 import userRouter from "./routes/user.route.js";
@@ -13,35 +13,31 @@ dotenv.config();
 
 const app = express();
 
-/* ================= CORS CONFIG ================= */
-
-
+/* ================= CORS (FINAL FIX) ================= */
 
 const allowedOrigins = [
   "http://localhost:5173",
   "https://ai-interview-psi-six.vercel.app",
   "https://ai-interview-dijf5ogn7-amanverma420s-projects.vercel.app",
-  "https://ai-interview-1nid7swrj-amanverma420s-projects.vercel.app" 
+  "https://ai-interview-1nid7swrj-amanverma420s-projects.vercel.app"
 ];
 
 app.use(cors({
-  origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
-
-    if (allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("CORS not allowed"));
-    }
-  },
+  origin: allowedOrigins,
   credentials: true
 }));
 
-app.options("*", cors()); // ✅ REQUIRED
+// 🔥 VERY IMPORTANT
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Credentials", "true");
+  next();
+});
+
+app.options("*", cors()); // preflight
 
 /* ================= MIDDLEWARE ================= */
 
-app.use(express.json());   // ✅ ADD THIS (VERY IMPORTANT)
+app.use(express.json());
 app.use(cookieParser());
 
 /* ================= ROUTES ================= */
@@ -59,7 +55,7 @@ app.get("/", (req, res) => {
 
 const PORT = process.env.PORT || 6000;
 
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Server running on port ${PORT}`);
-  connectDb();
+  await connectDb();
 });

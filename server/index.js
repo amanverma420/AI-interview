@@ -24,7 +24,7 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); // allow Postman
+    if (!origin) return callback(null, true); 
 
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
@@ -35,7 +35,7 @@ app.use(cors({
   credentials: true
 }));
 
-app.options("*", cors()); // preflight
+app.options("/*", cors()); // preflight
 
 /* ================= MIDDLEWARE ================= */
 

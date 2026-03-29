@@ -1,15 +1,19 @@
-import dotenv from "dotenv"
-import connectDb from "./config/connectDb.js"
-import cookieParser from "cookie-parser"
-dotenv.config()
-import cors from "cors"
-import authRouter from "./routes/auth.route.js"
-import userRouter from "./routes/user.route.js"
-import interviewRouter from "./routes/interview.route.js"
-import paymentRouter from "./routes/payment.route.js"
+import dotenv from "dotenv";
+import connectDb from "./config/connectDb.js";
+import cookieParser from "cookie-parser";
+import cors from "cors";
 import express from "express";
 
-const app = express()
+import authRouter from "./routes/auth.route.js";
+import userRouter from "./routes/user.route.js";
+import interviewRouter from "./routes/interview.route.js";
+import paymentRouter from "./routes/payment.route.js";
+
+dotenv.config();
+
+const app = express();
+
+/* ================= CORS CONFIG ================= */
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -19,25 +23,43 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
+    // allow Postman / server-to-server (no origin)
+    if (!origin) return callback(null, true);
+
+    if (allowedOrigins.includes(origin)) {
+      return callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      return callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true
 }));
 
-app.use(express.json())
-app.use(cookieParser())
+// ✅ IMPORTANT: handle preflight requests
+app.options("*", cors());
 
-app.use("/api/auth" , authRouter)
-app.use("/api/user", userRouter)
-app.use("/api/interview" , interviewRouter)
-app.use("/api/payment" , paymentRouter)
+/* ================= MIDDLEWARE ================= */
 
-const PORT = process.env.PORT || 6000
-app.listen(PORT , ()=>{
-    console.log(`Server running on port ${PORT}`)
-    connectDb()
-})
+app.use(express.json());
+app.use(cookieParser());
+
+/* ================= ROUTES ================= */
+
+app.use("/api/auth", authRouter);
+app.use("/api/user", userRouter);
+app.use("/api/interview", interviewRouter);
+app.use("/api/payment", paymentRouter);
+
+// ✅ root route (optional but useful)
+app.get("/", (req, res) => {
+  res.send("API is running 🚀");
+});
+
+/* ================= SERVER ================= */
+
+const PORT = process.env.PORT || 6000;
+
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  connectDb();
+});

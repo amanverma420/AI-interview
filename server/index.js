@@ -24,18 +24,20 @@ const allowedOrigins = [
 
 app.use(cors({
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true); 
+    // allow requests with no origin (mobile apps, postman, curl)
+    if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin)) {
-      callback(null, true);
+      return callback(null, true);
     } else {
-      callback(new Error("Not allowed by CORS"));
+      return callback(new Error("Not allowed by CORS"));
     }
   },
   credentials: true
 }));
 
-app.options("/*", cors()); // preflight
+// ❌ REMOVE THIS LINE (causing crash)
+// app.options("/*", cors());
 
 /* ================= MIDDLEWARE ================= */
 

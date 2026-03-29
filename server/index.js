@@ -11,14 +11,20 @@ import express from "express";
 
 const app = express()
 
-// ❌ REMOVE THIS LINE
-// app.options("*", cors());
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://ai-interview-psi-six.vercel.app",
+  "https://ai-interview-dijf5ogn7-amanverma420s-projects.vercel.app"
+];
 
 app.use(cors({
-  origin: [
-    "http://localhost:5173",
-    "https://ai-interview-psi-six.vercel.app"
-  ],
+  origin: function (origin, callback) {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
 

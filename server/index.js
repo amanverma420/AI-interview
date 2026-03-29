@@ -2,6 +2,7 @@ import dotenv from "dotenv";
 import connectDb from "./config/connectDb.js";
 import cookieParser from "cookie-parser";
 import express from "express";
+import cors from "cors";
 
 import authRouter from "./routes/auth.route.js";
 import userRouter from "./routes/user.route.js";
@@ -14,29 +15,29 @@ const app = express();
 
 /* ================= CORS CONFIG ================= */
 
+
+
 const allowedOrigins = [
   "http://localhost:5173",
   "https://ai-interview-psi-six.vercel.app",
-  "https://ai-interview-dijf5ogn7-amanverma420s-projects.vercel.app"
+  "https://ai-interview-dijf5ogn7-amanverma420s-projects.vercel.app",
+  "https://ai-interview-1nid7swrj-amanverma420s-projects.vercel.app" 
 ];
 
-app.use((req, res, next) => {
-  const origin = req.headers.origin;
+app.use(cors({
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true);
 
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("CORS not allowed"));
+    }
+  },
+  credentials: true
+}));
 
-  res.setHeader("Access-Control-Allow-Credentials", "true");
-  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
-
-  if (req.method === "OPTIONS") {
-    return res.sendStatus(200);
-  }
-
-  next();
-});
+app.options("*", cors()); // ✅ REQUIRED
 
 /* ================= MIDDLEWARE ================= */
 

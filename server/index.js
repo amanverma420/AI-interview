@@ -13,7 +13,7 @@ dotenv.config();
 
 const app = express();
 
-/* ================= CORS (FINAL FIX) ================= */
+/* ================= CORS (FINAL CLEAN) ================= */
 
 const allowedOrigins = [
   "http://localhost:5173",
@@ -23,15 +23,17 @@ const allowedOrigins = [
 ];
 
 app.use(cors({
-  origin: allowedOrigins,
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow Postman
+
+    if (allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
   credentials: true
 }));
-
-// 🔥 VERY IMPORTANT
-app.use((req, res, next) => {
-  res.header("Access-Control-Allow-Credentials", "true");
-  next();
-});
 
 app.options("*", cors()); // preflight
 

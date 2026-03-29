@@ -1,7 +1,6 @@
 import dotenv from "dotenv";
 import connectDb from "./config/connectDb.js";
 import cookieParser from "cookie-parser";
-import cors from "cors";
 import express from "express";
 
 import authRouter from "./routes/auth.route.js";
@@ -21,26 +20,27 @@ const allowedOrigins = [
   "https://ai-interview-dijf5ogn7-amanverma420s-projects.vercel.app"
 ];
 
-app.use(cors({
-  origin: function (origin, callback) {
-    // allow Postman / server-to-server (no origin)
-    if (!origin) return callback(null, true);
+app.use((req, res, next) => {
+  const origin = req.headers.origin;
 
-    if (allowedOrigins.includes(origin)) {
-      return callback(null, true);
-    } else {
-      return callback(new Error("Not allowed by CORS"));
-    }
-  },
-  credentials: true
-}));
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
 
-// ✅ IMPORTANT: handle preflight requests
-app.options("*", cors());
+  res.setHeader("Access-Control-Allow-Credentials", "true");
+  res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type,Authorization");
+
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+
+  next();
+});
 
 /* ================= MIDDLEWARE ================= */
 
-app.use(express.json());
+app.use(express.json());   // ✅ ADD THIS (VERY IMPORTANT)
 app.use(cookieParser());
 
 /* ================= ROUTES ================= */
@@ -50,7 +50,6 @@ app.use("/api/user", userRouter);
 app.use("/api/interview", interviewRouter);
 app.use("/api/payment", paymentRouter);
 
-// ✅ root route (optional but useful)
 app.get("/", (req, res) => {
   res.send("API is running 🚀");
 });
